@@ -20,6 +20,7 @@ import dasha
 import manglik
 import sadesati
 import panchang
+import remedies
 from milan import NAKSHATRAS
 
 load_dotenv()
@@ -197,6 +198,13 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 result += "*Sade Sati:* Not active\n"
 
+            if manglik_result['is_manglik'] or sadesati_result['is_active']:
+                result += "\n*Suggested Remedies:*\n"
+                if manglik_result['is_manglik']:
+                    result += f"  Manglik: {remedies.MANGLIK_REMEDY}\n"
+                if sadesati_result['is_active']:
+                    result += f"  Sade Sati: {remedies.SADESATI_REMEDY}\n"
+
             await update.message.reply_text(result, parse_mode="Markdown")
             return ConversationHandler.END
 
@@ -232,6 +240,12 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if antar_planet:
                     result += f"*Current Antardasha:* {antar_planet}\n"
                     result += f"  ({antar_start.strftime('%d-%m-%Y')} to {antar_end.strftime('%d-%m-%Y')})\n\n"
+
+                remedy = remedies.get_dasha_remedy(maha_planet)
+                if remedy:
+                    result += f"*Remedy for {maha_planet} Mahadasha:*\n"
+                    result += f"  Mantra: {remedy['mantra']}\n"
+                    result += f"  Upay: {remedy['upay']}\n\n"
             else:
                 result += "Could not determine current dasha (date out of calculated range).\n\n"
 
@@ -387,7 +401,8 @@ async def m2_get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             verdict = "Low compatibility — consult an astrologer before proceeding."
 
         if p1_manglik['is_manglik'] != p2_manglik['is_manglik']:
-            verdict += " Note: Manglik status differs between the two — consult an astrologer about this dosha."
+            verdict += " Note: Manglik status differs between the two."
+            text += f"\n*Remedy note:* {remedies.MANGLIK_REMEDY}\n\n"
 
         text += verdict
 
