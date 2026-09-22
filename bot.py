@@ -17,6 +17,10 @@ import core
 import rashifal
 import milan
 import dasha
+import manglik
+import sadesati
+import panchang
+from milan import NAKSHATRAS
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -62,9 +66,24 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Available commands:*\n"
         "/start - Show main menu\n"
         "/kundli - Generate your birth kundli\n"
+        "/panchang - Today's Panchang\n"
         "/cancel - Cancel current operation\n"
         "/help - Show this message"
     )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def panchang_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    today = datetime.now()
+    result = panchang.get_panchang(today.year, today.month, today.day)
+    nak_name = NAKSHATRAS[result['nakshatra_index']][0]
+
+    text = f"📅 *Panchang — {result['date']} ({result['vara']})*\n\n"
+    text += f"*Tithi:* {result['tithi']}\n"
+    text += f"*Nakshatra:* {nak_name}\n"
+    text += f"*Yoga:* {result['yoga']}\n"
+    text += f"*Sun Sign:* {result['sun_sign']}\n"
+    text += f"*Moon Sign:* {result['moon_sign']}\n"
+
     await update.message.reply_text(text, parse_mode="Markdown")
 
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,6 +173,9 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             planets = core.get_planet_positions(jd)
             ascendant = core.get_ascendant(jd, lat, lon)
             houses = core.get_houses(jd, lat, lon)
+            manglik_result = manglik.check_manglik(jd, lat, lon)
+            natal_moon_index = core.ZODIAC_SIGNS.index(planets['Moon']['sign'])
+            sadesati_result = sadesati.check_sade_sati(natal_moon_index)
 
             name = context.user_data['name']
             result = f"🔮 *Kundli for {name}*\n"
@@ -166,6 +188,14 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result += "\n*Houses:*\n"
             for h, data in houses.items():
                 result += f"  House {h}: {data['sign']} {data['degree']}°\n"
+
+            result += f"\n*Manglik Dosha:* {'Yes' if manglik_result['is_manglik'] else 'No'} "
+            result += f"(Mars in house {manglik_result['mars_house']})\n"
+
+            if sadesati_result['is_active']:
+                result += f"*Sade Sati:* Active — {sadesati_result['phase']}\n"
+            else:
+                result += "*Sade Sati:* Not active\n"
 
             await update.message.reply_text(result, parse_mode="Markdown")
             return ConversationHandler.END
@@ -335,9 +365,12 @@ async def m2_get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p1_name = context.user_data['p1_name']
         p2_name = context.user_data['p2_name']
 
+        p1_manglik = manglik.check_manglik(context.user_data['p1_jd'], context.user_data['p1_lat'], context.user_data['p1_lon'])
+        p2_manglik = manglik.check_manglik(jd2, lat2, lon2)
+
         text = f"💑 *Kundli Milan: {p1_name} & {p2_name}*\n\n"
-        text += f"{p1_name}: {result['person1_moon_sign']} ({result['person1_nakshatra']})\n"
-        text += f"{p2_name}: {result['person2_moon_sign']} ({result['person2_nakshatra']})\n\n"
+        text += f"{p1_name}: {result['person1_moon_sign']} ({result['person1_nakshatra']}) — Manglik: {'Yes' if p1_manglik['is_manglik'] else 'No'}\n"
+        text += f"{p2_name}: {result['person2_moon_sign']} ({result['person2_nakshatra']}) — Manglik: {'Yes' if p2_manglik['is_manglik'] else 'No'}\n\n"
         text += "*Ashtakoot Guna Milan:*\n"
         for koota, (score, detail, max_score) in result['kootas'].items():
             text += f"  {koota}: {score}/{max_score}\n"
@@ -352,6 +385,10 @@ async def m2_get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             verdict = "Average match — some factors need attention."
         else:
             verdict = "Low compatibility — consult an astrologer before proceeding."
+
+        if p1_manglik['is_manglik'] != p2_manglik['is_manglik']:
+            verdict += " Note: Manglik status differs between the two — consult an astrologer about this dosha."
+
         text += verdict
 
         await update.message.reply_text(text, parse_mode="Markdown")
@@ -393,6 +430,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("panchang", panchang_command))
     app.add_handler(conv_handler)
     app.add_handler(CallbackQueryHandler(rashifal_period_router, pattern="^period_"))
 
