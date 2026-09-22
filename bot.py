@@ -15,6 +15,7 @@ import pytz
 
 import core
 import rashifal
+import milan
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -25,7 +26,9 @@ logger = logging.getLogger(__name__)
 geolocator = Nominatim(user_agent="astrokundli_bot")
 tf = TimezoneFinder()
 
-NAME, DOB, TOB, POB = range(4)
+(NAME, DOB, TOB, POB,
+ M1_NAME, M1_DOB, M1_TOB, M1_POB,
+ M2_NAME, M2_DOB, M2_TOB, M2_POB) = range(12)
 
 def main_menu_keyboard():
     keyboard = [
@@ -76,8 +79,9 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("Let's get your Rashifal. First, tell me your birth date (DD-MM-YYYY, e.g. 15-08-1995):")
         return DOB
     elif query.data == "menu_milan":
-        await query.message.reply_text("💑 Kundli Milan is coming soon!")
-        return ConversationHandler.END
+        context.user_data['flow'] = 'milan'
+        await query.message.reply_text("Let's check compatibility. First, Person 1's name:")
+        return M1_NAME
     elif query.data == "menu_dasha":
         await query.message.reply_text("🪐 Dasha Analysis is coming soon!")
         return ConversationHandler.END
@@ -201,6 +205,129 @@ async def rashifal_period_router(update: Update, context: ContextTypes.DEFAULT_T
         house, text = rashifal.get_monthly_rashifal(natal_moon_index)
         await query.message.reply_text(f"🌙 *Monthly Rashifal — {moon_sign_name}*\n\n{text}", parse_mode="Markdown")
 
+# ---- Kundli Milan flow ----
+
+async def m1_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['p1_name'] = update.message.text
+    await update.message.reply_text("Person 1's birth date (DD-MM-YYYY):")
+    return M1_DOB
+
+async def m1_get_dob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        context.user_data['p1_dob'] = datetime.strptime(update.message.text.strip(), "%d-%m-%Y")
+    except ValueError:
+        await update.message.reply_text("Wrong format. Send again as DD-MM-YYYY:")
+        return M1_DOB
+    await update.message.reply_text("Person 1's birth time (24-hour HH:MM):")
+    return M1_TOB
+
+async def m1_get_tob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        t = datetime.strptime(update.message.text.strip(), "%H:%M")
+        context.user_data['p1_hour'] = t.hour
+        context.user_data['p1_minute'] = t.minute
+    except ValueError:
+        await update.message.reply_text("Wrong format. Send again as HH:MM:")
+        return M1_TOB
+    await update.message.reply_text("Person 1's birth place (city, country):")
+    return M1_POB
+
+async def m1_get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    place = update.message.text.strip()
+    resolved = resolve_place_and_offset(
+        place, context.user_data['p1_dob'], context.user_data['p1_hour'], context.user_data['p1_minute']
+    )
+    if not resolved:
+        await update.message.reply_text("Couldn't find that place. Send a valid city, country:")
+        return M1_POB
+    lat, lon, tz_name, tz_offset = resolved
+    dob = context.user_data['p1_dob']
+    context.user_data['p1_jd'] = core.get_julian_day(
+        dob.year, dob.month, dob.day, context.user_data['p1_hour'], context.user_data['p1_minute'], tz_offset
+    )
+    context.user_data['p1_lat'] = lat
+    context.user_data['p1_lon'] = lon
+
+    await update.message.reply_text("Got it. Now Person 2's name:")
+    return M2_NAME
+
+async def m2_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['p2_name'] = update.message.text
+    await update.message.reply_text("Person 2's birth date (DD-MM-YYYY):")
+    return M2_DOB
+
+async def m2_get_dob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        context.user_data['p2_dob'] = datetime.strptime(update.message.text.strip(), "%d-%m-%Y")
+    except ValueError:
+        await update.message.reply_text("Wrong format. Send again as DD-MM-YYYY:")
+        return M2_DOB
+    await update.message.reply_text("Person 2's birth time (24-hour HH:MM):")
+    return M2_TOB
+
+async def m2_get_tob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        t = datetime.strptime(update.message.text.strip(), "%H:%M")
+        context.user_data['p2_hour'] = t.hour
+        context.user_data['p2_minute'] = t.minute
+    except ValueError:
+        await update.message.reply_text("Wrong format. Send again as HH:MM:")
+        return M2_TOB
+    await update.message.reply_text("Person 2's birth place (city, country):")
+    return M2_POB
+
+async def m2_get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    place = update.message.text.strip()
+    await update.message.reply_text("Calculating compatibility, please wait...")
+
+    resolved = resolve_place_and_offset(
+        place, context.user_data['p2_dob'], context.user_data['p2_hour'], context.user_data['p2_minute']
+    )
+    if not resolved:
+        await update.message.reply_text("Couldn't find that place. Send a valid city, country:")
+        return M2_POB
+    lat2, lon2, tz_name2, tz_offset2 = resolved
+    dob2 = context.user_data['p2_dob']
+    jd2 = core.get_julian_day(
+        dob2.year, dob2.month, dob2.day, context.user_data['p2_hour'], context.user_data['p2_minute'], tz_offset2
+    )
+
+    try:
+        result = milan.calculate_milan(
+            context.user_data['p1_jd'], context.user_data['p1_lat'], context.user_data['p1_lon'],
+            jd2, lat2, lon2
+        )
+
+        p1_name = context.user_data['p1_name']
+        p2_name = context.user_data['p2_name']
+
+        text = f"💑 *Kundli Milan: {p1_name} & {p2_name}*\n\n"
+        text += f"{p1_name}: {result['person1_moon_sign']} ({result['person1_nakshatra']})\n"
+        text += f"{p2_name}: {result['person2_moon_sign']} ({result['person2_nakshatra']})\n\n"
+        text += "*Ashtakoot Guna Milan:*\n"
+        for koota, (score, detail, max_score) in result['kootas'].items():
+            text += f"  {koota}: {score}/{max_score}\n"
+        text += f"\n*Total Score: {result['total_score']}/{result['max_score']}*\n\n"
+
+        pct = result['total_score'] / result['max_score']
+        if pct >= 0.75:
+            verdict = "Excellent match."
+        elif pct >= 0.55:
+            verdict = "Good match."
+        elif pct >= 0.40:
+            verdict = "Average match — some factors need attention."
+        else:
+            verdict = "Low compatibility — consult an astrologer before proceeding."
+        text += verdict
+
+        await update.message.reply_text(text, parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Error in milan calculation: {e}")
+        await update.message.reply_text("Something went wrong. Please try /start again.")
+
+    return ConversationHandler.END
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Cancelled. Use /start to begin again.")
     return ConversationHandler.END
@@ -218,6 +345,14 @@ def main():
             DOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_dob)],
             TOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_tob)],
             POB: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_pob)],
+            M1_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, m1_get_name)],
+            M1_DOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, m1_get_dob)],
+            M1_TOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, m1_get_tob)],
+            M1_POB: [MessageHandler(filters.TEXT & ~filters.COMMAND, m1_get_pob)],
+            M2_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, m2_get_name)],
+            M2_DOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, m2_get_dob)],
+            M2_TOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, m2_get_tob)],
+            M2_POB: [MessageHandler(filters.TEXT & ~filters.COMMAND, m2_get_pob)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
