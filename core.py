@@ -80,3 +80,28 @@ def get_houses(jd, lat, lon):
             'degree': round(cusp % 30, 2)
         }
     return house_data
+
+def get_planet_positions_with_retrograde(jd):
+    positions = {}
+    for name, planet_id in PLANETS.items():
+        result = swe.calc_ut(jd, planet_id, swe.FLG_SIDEREAL | swe.FLG_SPEED)[0]
+        lon = result[0]
+        speed = result[3]
+        sign_index = int(lon / 30)
+        degree_in_sign = lon % 30
+        positions[name] = {
+            'longitude': round(lon, 4),
+            'sign': ZODIAC_SIGNS[sign_index],
+            'degree': round(degree_in_sign, 2),
+            'retrograde': speed < 0
+        }
+    rahu_lon = positions['Rahu']['longitude']
+    ketu_lon = (rahu_lon + 180) % 360
+    sign_index = int(ketu_lon / 30)
+    positions['Ketu'] = {
+        'longitude': round(ketu_lon, 4),
+        'sign': ZODIAC_SIGNS[sign_index],
+        'degree': round(ketu_lon % 30, 2),
+        'retrograde': True  # Rahu/Ketu are always treated as retrograde in Vedic astrology
+    }
+    return positions

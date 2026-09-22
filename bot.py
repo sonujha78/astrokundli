@@ -21,6 +21,7 @@ import manglik
 import sadesati
 import panchang
 import remedies
+import navamsa
 from milan import NAKSHATRAS
 
 load_dotenv()
@@ -171,7 +172,7 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
         jd = core.get_julian_day(dob.year, dob.month, dob.day, hour, minute, tz_offset)
 
         if context.user_data['flow'] == 'kundli':
-            planets = core.get_planet_positions(jd)
+            planets = core.get_planet_positions_with_retrograde(jd)
             ascendant = core.get_ascendant(jd, lat, lon)
             houses = core.get_houses(jd, lat, lon)
             manglik_result = manglik.check_manglik(jd, lat, lon)
@@ -185,10 +186,17 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result += f"*Ascendant (Lagna):* {ascendant['sign']} {ascendant['degree']}°\n\n"
             result += "*Planetary Positions:*\n"
             for planet, data in planets.items():
-                result += f"  {planet}: {data['sign']} {data['degree']}°\n"
+                r_marker = " (R)" if data.get('retrograde') else ""
+                result += f"  {planet}: {data['sign']} {data['degree']}°{r_marker}\n"
             result += "\n*Houses:*\n"
             for h, data in houses.items():
                 result += f"  House {h}: {data['sign']} {data['degree']}°\n"
+
+            navamsa_result = navamsa.get_navamsa_chart(jd, lat, lon)
+            result += f"\n*Navamsa (D9) Ascendant:* {navamsa_result['ascendant']}\n"
+            result += "*Navamsa Positions:*\n"
+            for planet, sign in navamsa_result['planets'].items():
+                result += f"  {planet}: {sign}\n"
 
             result += f"\n*Manglik Dosha:* {'Yes' if manglik_result['is_manglik'] else 'No'} "
             result += f"(Mars in house {manglik_result['mars_house']})\n"
@@ -220,7 +228,7 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
 
         elif context.user_data['flow'] == 'dasha':
-            planets = core.get_planet_positions(jd)
+            planets = core.get_planet_positions_with_retrograde(jd)
             moon_lon = planets['Moon']['longitude']
             birth_dt = datetime(dob.year, dob.month, dob.day, hour, minute)
 
