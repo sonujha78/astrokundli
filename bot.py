@@ -16,6 +16,7 @@ import pytz
 import core
 import rashifal
 import milan
+import dasha
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -83,8 +84,9 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("Let's check compatibility. First, Person 1's name:")
         return M1_NAME
     elif query.data == "menu_dasha":
-        await query.message.reply_text("🪐 Dasha Analysis is coming soon!")
-        return ConversationHandler.END
+        context.user_data['flow'] = 'dasha'
+        await query.message.reply_text("Let's find your current Dasha. First, tell me the name:")
+        return NAME
 
 async def kundli_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['flow'] = 'kundli'
@@ -177,6 +179,38 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=rashifal_period_keyboard()
             )
+            return ConversationHandler.END
+
+        elif context.user_data['flow'] == 'dasha':
+            planets = core.get_planet_positions(jd)
+            moon_lon = planets['Moon']['longitude']
+            birth_dt = datetime(dob.year, dob.month, dob.day, hour, minute)
+
+            lord, balance = dasha.get_birth_dasha_balance(moon_lon)
+            timeline = dasha.build_mahadasha_timeline(birth_dt, moon_lon)
+            today = datetime.now()
+            maha_planet, maha_start, maha_end = dasha.get_current_mahadasha(timeline, today)
+
+            name = context.user_data['name']
+            result = f"🪐 *Dasha Analysis for {name}*\n\n"
+            result += f"Birth Nakshatra Lord: {lord} (balance at birth: {balance:.1f} years)\n\n"
+
+            if maha_planet:
+                antar_planet, antar_start, antar_end = dasha.get_antardasha(maha_planet, maha_start, maha_end, today)
+                result += f"*Current Mahadasha:* {maha_planet}\n"
+                result += f"  ({maha_start.strftime('%d-%m-%Y')} to {maha_end.strftime('%d-%m-%Y')})\n\n"
+                if antar_planet:
+                    result += f"*Current Antardasha:* {antar_planet}\n"
+                    result += f"  ({antar_start.strftime('%d-%m-%Y')} to {antar_end.strftime('%d-%m-%Y')})\n\n"
+            else:
+                result += "Could not determine current dasha (date out of calculated range).\n\n"
+
+            result += "*Mahadasha Timeline (first 9 periods):*\n"
+            for planet, start, end in timeline[:9]:
+                marker = " ← current" if planet == maha_planet else ""
+                result += f"  {planet}: {start.strftime('%Y')} - {end.strftime('%Y')}{marker}\n"
+
+            await update.message.reply_text(result, parse_mode="Markdown")
             return ConversationHandler.END
 
     except Exception as e:
