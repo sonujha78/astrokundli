@@ -68,3 +68,15 @@ if __name__ == "__main__":
     print("\nPlanetary Positions:")
     for planet, data in planets.items():
         print(f"  {planet}: {data['sign']} {data['degree']}° (lon: {data['longitude']})")
+
+def get_houses(jd, lat, lon):
+    houses, ascmc = swe.houses_ex(jd, lat, lon, b'P', swe.FLG_SIDEREAL)
+    house_data = {}
+    for i, cusp in enumerate(houses, start=1):
+        sign_index = int(cusp / 30)
+        house_data[i] = {
+            'cusp_longitude': round(cusp, 4),
+            'sign': ZODIAC_SIGNS[sign_index],
+            'degree': round(cusp % 30, 2)
+        }
+    return house_data
