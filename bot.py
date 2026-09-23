@@ -23,6 +23,9 @@ import panchang
 import remedies
 import navamsa
 import lucky
+import pdf_export
+import tempfile
+import os
 from milan import NAKSHATRAS
 
 load_dotenv()
@@ -221,6 +224,22 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     result += f"  Sade Sati: {remedies.SADESATI_REMEDY}\n"
 
             await update.message.reply_text(result, parse_mode="Markdown")
+
+            try:
+                lucky_info = lucky.get_lucky_info(planets['Moon']['sign'])
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                    pdf_path = tmp.name
+                pdf_export.generate_kundli_pdf(
+                    pdf_path, name, place, dob.strftime('%d-%m-%Y'), f"{hour:02d}:{minute:02d}",
+                    f"{tz_name} (UTC{tz_offset:+.1f})", ascendant, planets, houses,
+                    navamsa_result, manglik_result, sadesati_result, lucky_info
+                )
+                with open(pdf_path, 'rb') as pdf_file:
+                    await update.message.reply_document(pdf_file, filename=f"{name}_Kundli.pdf")
+                os.remove(pdf_path)
+            except Exception as pdf_err:
+                logger.error(f"PDF generation error: {pdf_err}")
+
             return ConversationHandler.END
 
         elif context.user_data['flow'] == 'rashifal':
