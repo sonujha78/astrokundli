@@ -277,6 +277,14 @@ sudo systemctl restart astrokundli
 
 ---
 
+## Disclaimer
+
+The astronomical calculations in this bot (planetary positions, houses, transits, current Dasha, Panchang) are computed using the Swiss Ephemeris — the same engine used in professional astrology software and observatories — and are accurate to the underlying astronomical data.
+
+The predictions and interpretations (Rashifal text, Kundli Milan compatibility, Manglik Dosha, Sade Sati effects, remedies) follow traditional Vedic astrology methods as laid out in classical texts. Astrology itself has not been validated as a predictive science by peer-reviewed research. This bot is intended for entertainment, cultural, and self-reflection purposes, not as a substitute for professional advice (medical, legal, financial, or otherwise).
+
+---
+
 ## License
 
 Apache License 2.0
