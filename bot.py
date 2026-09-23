@@ -22,6 +22,7 @@ import sadesati
 import panchang
 import remedies
 import navamsa
+import lucky
 from milan import NAKSHATRAS
 
 load_dotenv()
@@ -198,6 +199,12 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for planet, sign in navamsa_result['planets'].items():
                 result += f"  {planet}: {sign}\n"
 
+            lucky_info = lucky.get_lucky_info(planets['Moon']['sign'])
+            if lucky_info:
+                result += f"\n*Lucky Numbers:* {', '.join(map(str, lucky_info['number']))}\n"
+                result += f"*Lucky Color:* {lucky_info['color']}\n"
+                result += f"*Lucky Day:* {lucky_info['day']}\n"
+
             result += f"\n*Manglik Dosha:* {'Yes' if manglik_result['is_manglik'] else 'No'} "
             result += f"(Mars in house {manglik_result['mars_house']})\n"
 
@@ -220,8 +227,15 @@ async def get_pob(update: Update, context: ContextTypes.DEFAULT_TYPE):
             natal_moon_index = rashifal.get_natal_moon_sign(jd, lat, lon)
             context.user_data['natal_moon_index'] = natal_moon_index
             moon_sign_name = core.ZODIAC_SIGNS[natal_moon_index]
+            lucky_info = lucky.get_lucky_info(moon_sign_name)
+            lucky_text = ""
+            if lucky_info:
+                lucky_text = (
+                    f"\nLucky Numbers: {', '.join(map(str, lucky_info['number']))} | "
+                    f"Color: {lucky_info['color']} | Day: {lucky_info['day']}\n"
+                )
             await update.message.reply_text(
-                f"Your Moon Sign (Rashi) is *{moon_sign_name}*.\n\nChoose a period:",
+                f"Your Moon Sign (Rashi) is *{moon_sign_name}*.\n{lucky_text}\nChoose a period:",
                 parse_mode="Markdown",
                 reply_markup=rashifal_period_keyboard()
             )
