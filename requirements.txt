@@ -13,7 +13,7 @@ httpcore==1.0.9
 httpx==0.28.1
 idna==3.20
 numpy==2.5.3
-pillow==12.3.0
+pillow==13.0.0
 pycparser==3.0
 pyswisseph==2.10.3.2
 python-dotenv==1.2.3
